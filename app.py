@@ -23,9 +23,9 @@ def get_weather_data(city, units):
         geo_response.raise_for_status()
         geo_data = geo_response.json()
         
-        if "results" not in geo_data:
-            st.error(f"City not found: {city}")
-            return None, None
+        if "results" not in geo_data or len(geo_data['results']) == 0:
+            st.error(f"City not found: {city}. Please try again.")
+            return None, None, None
 
         location = geo_data['results'][0]
         lat = location['latitude']
@@ -203,7 +203,8 @@ st.set_page_config(page_title="Weather Assistant", layout="wide")
 
 # --- Sidebar for Inputs ---
 with st.sidebar:
-    st.image("https.raw.githubusercontent.com/Ejaz-f1/Streamlit-Weather-App/main/images/logo.png", width=100) # Replaced with a generic logo URL
+    # *** THIS IS THE CORRECTED LINE WITH A WORKING IMAGE URL ***
+    st.image("https://cdn-icons-png.flaticon.com/512/1779/1779940.png", width=100) 
     st.title("PyWeather")
     
     # Check for saved cities in session state
@@ -237,21 +238,28 @@ with st.sidebar:
 # --- Main Content Area ---
 st.header(f"Weather in {st.session_state.city}")
 
-weather_data, air_data, location = get_weather_data(st.session_state.city, selected_unit)
+# Fetch data only if the city name is not empty
+if st.session_state.city:
+    weather_data, air_data, location = get_weather_data(st.session_state.city, selected_unit)
 
-if weather_data and air_data and location:
-    # Store data in session state to persist across tab clicks
-    st.session_state.weather_data = weather_data
-    st.session_state.air_data = air_data
-    st.session_state.unit_symbol = unit_symbol
-    st.session_state.selected_unit = selected_unit
-    st.session_state.location = location
+    if weather_data and air_data and location:
+        # Store data in session state to persist across tab clicks
+        st.session_state.weather_data = weather_data
+        st.session_state.air_data = air_data
+        st.session_state.unit_symbol = unit_symbol
+        st.session_state.selected_unit = selected_unit
+        st.session_state.location = location
 
-    # Add to favorites if it's a new city
-    if st.session_state.city not in st.session_state.saved_cities:
-        if len(st.session_state.saved_cities) >= 5: # Limit to 5 favorites
-            st.session_state.saved_cities.pop(0)
-        st.session_state.saved_cities.append(st.session_state.city)
+        # Add to favorites if it's a new city
+        if st.session_state.city not in st.session_state.saved_cities:
+            if len(st.session_state.saved_cities) >= 5: # Limit to 5 favorites
+                st.session_state.saved_cities.pop(0)
+            st.session_state.saved_cities.append(st.session_state.city)
+    else:
+        # Don't clear old data if new fetch fails, just show the error
+        pass
+else:
+    st.info("Please enter a city name in the sidebar.")
 
 
 if "weather_data" not in st.session_state:
