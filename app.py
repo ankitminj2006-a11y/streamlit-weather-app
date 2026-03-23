@@ -2,14 +2,20 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
-import anthropic
+import google.generativeai as genai
 
 # --- API Configuration (Open-Meteo) ---
 BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
-# --- Anthropic Client ---
-client = anthropic.Anthropic()
+# --- Gemini AI Setup ---
+# Get your FREE key at: https://aistudio.google.com/app/apikey
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-1.5-flash")  # Free & fast model
+else:
+    model = None
+
 
 # --- Helper Functions for API Calls ---
 
@@ -98,7 +104,7 @@ def process_forecast_data(forecast_data):
     return daily_df, hourly_df.set_index('Timestamp')
 
 
-# --- AI Helper Functions ---
+# --- AI Helper Functions (Gemini) ---
 
 def build_weather_context(weather_data, air_data, location, unit_symbol, selected_unit):
     current = weather_data['current']
@@ -132,26 +138,24 @@ def build_weather_context(weather_data, air_data, location, unit_symbol, selecte
 
 
 def get_ai_weather_summary(weather_context, city):
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=300,
-        messages=[{"role": "user", "content": f"""You are a friendly weather presenter. Write a concise, 
-engaging 2-3 sentence weather summary for {city}. Be conversational and highlight what matters most 
-for someone planning their day. Don't just list facts — paint a picture.
+    if not model:
+        return "⚠️ Add your GEMINI_API_KEY to enable AI summaries."
+    prompt = f"""You are a friendly weather presenter. Write a concise, engaging 2-3 sentence 
+weather summary for {city}. Be conversational and highlight what matters most for someone 
+planning their day. Don't just list facts — paint a picture.
 
 Weather Data:
 {weather_context}
 
-Write only the summary, no preamble."""}]
-    )
-    return message.content[0].text
+Write only the summary, no preamble."""
+    response = model.generate_content(prompt)
+    return response.text
 
 
 def get_ai_recommendations(weather_context, city):
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=600,
-        messages=[{"role": "user", "content": f"""Based on the weather data below for {city}, provide:
+    if not model:
+        return "⚠️ Add your GEMINI_API_KEY in secrets to enable AI recommendations."
+    prompt = f"""Based on the weather data below for {city}, provide:
 
 **👗 What to Wear**
 2-3 sentences with specific clothing advice.
@@ -165,31 +169,34 @@ def get_ai_recommendations(weather_context, city):
 Be specific, practical, and friendly.
 
 Weather Data:
-{weather_context}"""}]
-    )
-    return message.content[0].text
+{weather_context}"""
+    response = model.generate_content(prompt)
+    return response.text
 
 
 def get_ai_chat_response(user_message, weather_context, city, chat_history):
-    system_prompt = f"""You are PyWeather AI, a friendly weather assistant for {city}. 
-You have access to current real-time weather data. Answer questions about the weather, 
+    if not model:
+        return "⚠️ Add your GEMINI_API_KEY in secrets to enable AI chat."
+
+    # Build conversation history for Gemini
+    history = []
+    for msg in chat_history[-6:]:
+        role = "user" if msg["role"] == "user" else "model"
+        history.append({"role": role, "parts": [msg["content"]]})
+
+    chat = model.start_chat(history=history)
+
+    full_message = f"""You are PyWeather AI, a friendly weather assistant for {city}.
+You have access to current real-time weather data. Answer questions about the weather,
 give advice, or chat about weather-related topics. Be concise (2-4 sentences) and conversational.
 
 Current Weather Data:
-{weather_context}"""
+{weather_context}
 
-    messages = []
-    for msg in chat_history[-6:]:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": user_message})
+User question: {user_message}"""
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=400,
-        system=system_prompt,
-        messages=messages
-    )
-    return response.content[0].text
+    response = chat.send_message(full_message)
+    return response.text
 
 
 # --- Main Application UI ---
@@ -206,7 +213,7 @@ st.markdown("""
     font-size: 0.9em;
 }
 .chat-ai {
-    background: #f3e5f5;
+    background: #e8f5e9;
     border-radius: 12px 12px 12px 2px;
     padding: 10px 14px;
     margin: 6px 0;
@@ -220,7 +227,10 @@ st.markdown("""
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/1779/1779940.png", width=80)
     st.title("PyWeather AI")
-    st.caption("✨ Powered by Claude AI")
+    st.caption("✨ Powered by Google Gemini (Free)")
+
+    if not GEMINI_API_KEY:
+        st.warning("⚠️ No Gemini API key found!\n\nGet a FREE key at:\naistudio.google.com/app/apikey\n\nThen add it to your secrets.")
 
     if 'saved_cities' not in st.session_state:
         st.session_state.saved_cities = ["London", "New York", "Tokyo"]
@@ -253,7 +263,7 @@ with st.sidebar:
 
     # --- AI Chat Widget ---
     st.write("---")
-    st.markdown("### 🤖 Ask AI")
+    st.markdown("### 🤖 Ask Gemini AI")
 
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
@@ -336,13 +346,12 @@ else:
     with tab_today:
         st.subheader(f"Current Conditions — {location['name']}, {location.get('country_code', '')}")
 
-        # AI Summary
         if 'ai_summary' not in st.session_state or st.session_state.ai_summary is None:
             with st.spinner("✨ Generating AI summary..."):
                 try:
                     st.session_state.ai_summary = get_ai_weather_summary(weather_context, st.session_state.city)
                 except Exception as e:
-                    st.session_state.ai_summary = f"(AI summary unavailable: {e})"
+                    st.session_state.ai_summary = f"(AI summary error: {e})"
 
         st.info(f"🤖 **AI Summary:** {st.session_state.ai_summary}")
         st.write("---")
@@ -400,19 +409,19 @@ else:
     # --- Tab 3: AI Recommendations ---
     with tab_recommendations:
         st.header("🤖 AI-Powered Recommendations")
-        st.caption("Personalized insights from Claude based on real-time weather data")
+        st.caption("Personalized insights from Google Gemini based on real-time weather data")
 
         if st.button("🔄 Regenerate Recommendations"):
             st.session_state.ai_recommendations = None
 
         if 'ai_recommendations' not in st.session_state or st.session_state.ai_recommendations is None:
-            with st.spinner("🤖 Claude is analyzing the weather for you..."):
+            with st.spinner("🤖 Gemini is analyzing the weather for you..."):
                 try:
                     st.session_state.ai_recommendations = get_ai_recommendations(
                         weather_context, st.session_state.city
                     )
                 except Exception as e:
-                    st.session_state.ai_recommendations = f"(AI recommendations unavailable: {e})"
+                    st.session_state.ai_recommendations = f"(AI recommendations error: {e})"
 
         st.markdown(st.session_state.ai_recommendations)
 
@@ -436,4 +445,4 @@ else:
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-        st.caption("💬 For a full conversation, use the **Ask AI** panel in the sidebar.")
+        st.caption("💬 For a full conversation, use the **Ask Gemini AI** panel in the sidebar.")
