@@ -9,7 +9,7 @@ BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
 # --- Gemini AI Setup ---
 # Get your FREE key at: https://aistudio.google.com/app/apikey
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyBZxOyWKGQqkcUtQUH7K6J5u4V_M1DDch8")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel("gemini-1.5-flash")  # Free & fast model
