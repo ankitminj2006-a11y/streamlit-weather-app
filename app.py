@@ -638,21 +638,19 @@ else:
         plot_choice = st.selectbox("", ["Temperature", "Rain Chance (%)", "Humidity"], label_visibility="collapsed")
 
         color_map = {"Temperature": "#ff7675", "Rain Chance (%)": "#74b9ff", "Humidity": "#55efc4"}
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=hourly_df.index, y=hourly_df[plot_choice],
-            fill='tozeroy',
-            line=dict(color=color_map[plot_choice], width=2),
-            fillcolor=color_map[plot_choice].replace(")", ", 0.1)").replace("rgb", "rgba") if "rgb" in color_map[plot_choice] else color_map[plot_choice] + "22",
-            name=plot_choice
-        ))
+        hourly_reset = hourly_df.reset_index()
+        fig = px.area(
+            hourly_reset, x="Timestamp", y=plot_choice,
+            color_discrete_sequence=[color_map[plot_choice]]
+        )
+        fig.update_traces(opacity=0.75)
         fig.update_layout(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#b2bec3'),
-            xaxis=dict(showgrid=False, color='#636e72'),
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#636e72'),
+            xaxis=dict(showgrid=False, color='#636e72', title=""),
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#636e72', title=plot_choice),
             margin=dict(l=0, r=0, t=20, b=0),
-            height=280
+            height=280, showlegend=False
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -722,17 +720,19 @@ else:
             labels_list = [x[0].title() for x in severity["all"]]
             scores_list = [round(x[1] * 100, 1) for x in severity["all"]]
             colors = ["#00b894", "#fdcb6e", "#e17055", "#d63031"]
-            fig2 = go.Figure(go.Bar(
-                x=scores_list, y=labels_list, orientation='h',
-                marker_color=colors[:len(labels_list)],
-                text=[f"{s}%" for s in scores_list],
-                textposition='outside'
-            ))
+            sev_df = pd.DataFrame({"Category": labels_list, "Confidence": scores_list, "Color": colors[:len(labels_list)]})
+            fig2 = px.bar(
+                sev_df, x="Confidence", y="Category", orientation='h',
+                color="Category",
+                color_discrete_map=dict(zip(labels_list, colors[:len(labels_list)])),
+                text=[f"{s}%" for s in scores_list]
+            )
+            fig2.update_traces(textposition='outside')
             fig2.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 font=dict(color='#b2bec3'),
-                xaxis=dict(showgrid=False, visible=False),
-                yaxis=dict(showgrid=False, color='#b2bec3'),
+                xaxis=dict(showgrid=False, visible=False, title=""),
+                yaxis=dict(showgrid=False, color='#b2bec3', title=""),
                 margin=dict(l=0, r=60, t=10, b=0),
                 height=180, showlegend=False
             )
@@ -784,43 +784,46 @@ else:
 
         # Temperature Range Chart
         st.markdown("<p class='section-header'>Temperature Range Forecast</p>", unsafe_allow_html=True)
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(
-            x=daily_df["day"], y=daily_df["temperature_2m_max"],
-            name="High", line=dict(color="#ff7675", width=2),
-            fill=None
-        ))
-        fig3.add_trace(go.Scatter(
-            x=daily_df["day"], y=daily_df["temperature_2m_min"],
-            name="Low", line=dict(color="#74b9ff", width=2),
-            fill='tonexty', fillcolor='rgba(116,185,255,0.08)'
-        ))
+        temp_plot_df = pd.DataFrame({
+            "Day": list(daily_df["day"]) * 2,
+            "Temperature": list(daily_df["temperature_2m_max"]) + list(daily_df["temperature_2m_min"]),
+            "Type": ["High"] * len(daily_df) + ["Low"] * len(daily_df)
+        })
+        fig3 = px.line(
+            temp_plot_df, x="Day", y="Temperature", color="Type",
+            color_discrete_map={"High": "#ff7675", "Low": "#74b9ff"},
+            markers=True
+        )
         fig3.update_layout(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#b2bec3'),
-            xaxis=dict(showgrid=False, color='#636e72'),
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#636e72'),
-            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#b2bec3')),
+            xaxis=dict(showgrid=False, color='#636e72', title=""),
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#636e72', title=f"Temp ({unit_symbol})"),
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#b2bec3'), title=""),
             margin=dict(l=0, r=0, t=10, b=0), height=260
         )
         st.plotly_chart(fig3, use_container_width=True)
 
         # Rain Probability Chart
         st.markdown("<p class='section-header'>Daily Rain Probability</p>", unsafe_allow_html=True)
-        bar_colors = ["#74b9ff" if r < 40 else "#0984e3" if r < 70 else "#2d3436" for r in daily_df["precipitation_probability_max"]]
-        fig4 = go.Figure(go.Bar(
-            x=daily_df["day"],
-            y=daily_df["precipitation_probability_max"],
-            marker_color=bar_colors,
-            text=[f"{int(r)}%" for r in daily_df["precipitation_probability_max"]],
-            textposition='outside'
-        ))
+        rain_df = daily_df[["day", "precipitation_probability_max"]].copy()
+        rain_df["Level"] = rain_df["precipitation_probability_max"].apply(
+            lambda r: "Low" if r < 40 else "Moderate" if r < 70 else "High"
+        )
+        fig4 = px.bar(
+            rain_df, x="day", y="precipitation_probability_max",
+            color="Level",
+            color_discrete_map={"Low": "#74b9ff", "Moderate": "#0984e3", "High": "#2d3436"},
+            text=rain_df["precipitation_probability_max"].apply(lambda r: f"{int(r)}%")
+        )
+        fig4.update_traces(textposition='outside')
         fig4.update_layout(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#b2bec3'),
-            xaxis=dict(showgrid=False, color='#636e72'),
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#636e72', range=[0, 120]),
-            margin=dict(l=0, r=0, t=20, b=0), height=240, showlegend=False
+            xaxis=dict(showgrid=False, color='#636e72', title=""),
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#636e72', range=[0, 120], title="Rain %"),
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#b2bec3'), title=""),
+            margin=dict(l=0, r=0, t=20, b=0), height=240
         )
         st.plotly_chart(fig4, use_container_width=True)
 
