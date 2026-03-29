@@ -2,21 +2,35 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import os
+from transformers import pipeline
+import re
 
+# ============================================================
+# ✅ Intel Unnati Project 3 — News Summarizer (NO API KEY!)
+# ✅ Intel Unnati Project 15 — Performance Analyzer (NO API KEY!)
+# Uses HuggingFace local models — runs completely free & offline
+# ============================================================
 
-from google import genai
-from google.genai import types
-
-# 👇 PASTE YOUR API KEY HERE (get it free from aistudio.google.com/app/apikey)
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyB0eyztEnRbdZw_AG30_1AQhiqU1ErZkho")
-
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY != "AIzaSyB0eyztEnRbdZw_AG30_1AQhiqU1ErZkho" else None
-MODEL_ID = "gemini-2.0-flash"
-
-# --- Weather API (Free, no key needed) ---
 BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
+# --- Load HuggingFace Models (cached so they load only once) ---
+@st.cache_resource
+def load_summarizer():
+    """Project 3: News/Text Summarizer — facebook/bart-large-cnn"""
+    return pipeline("summarization", model="facebook/bart-large-cnn")
+
+@st.cache_resource
+def load_classifier():
+    """Project 3: Zero-shot classifier for weather condition analysis"""
+    return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+
+@st.cache_resource
+def load_text_generator():
+    """Text generation for recommendations — no API needed"""
+    return pipeline("text2text-generation", model="google/flan-t5-base")
+
+
+# --- Weather API ---
 def get_weather_data(city, units):
     try:
         geo_response = requests.get(
@@ -53,7 +67,7 @@ def get_weather_data(city, units):
         return weather_response.json(), air_response.json(), location
 
     except Exception as e:
-        st.error(f"Error fetching weather data: {e}")
+        st.error(f"Error fetching weather: {e}")
         return None, None, None
 
 
@@ -88,100 +102,143 @@ def process_forecast_data(forecast_data):
     }, inplace=True)
     return daily_df, hourly_df.set_index("Timestamp")
 
-def build_weather_context(weather_data, air_data, location, unit_symbol, selected_unit):
+def build_weather_text(weather_data, air_data, location, unit_symbol, selected_unit):
+    """Builds a long natural language text about the weather — used for summarization."""
     current = weather_data["current"]
     daily_df, _ = process_forecast_data(weather_data)
     aqi = air_data["current"]["us_aqi"]
     aqi_level, _ = get_aqi_level(aqi)
     weather_desc, _ = WMO_CODES.get(current["weather_code"], ("Unknown", ""))
     wind_unit = "km/h" if selected_unit == "metric" else "mph"
-    forecast_lines = "".join([
-        f"  - {row['day']}: {WMO_CODES.get(row['weather_code'], ('Unknown',''))[0]}, "
-        f"High {row['temperature_2m_max']:.0f}{unit_symbol}, "
-        f"Low {row['temperature_2m_min']:.0f}{unit_symbol}, "
-        f"Rain {row['precipitation_probability_max']}%\n"
-        for _, row in daily_df.head(4).iterrows()
+
+    forecast_text = " ".join([
+        f"On {row['day']}, expect {WMO_CODES.get(row['weather_code'], ('Unknown',''))[0]} "
+        f"with a high of {row['temperature_2m_max']:.0f}{unit_symbol} "
+        f"and a low of {row['temperature_2m_min']:.0f}{unit_symbol}, "
+        f"with a {row['precipitation_probability_max']}% chance of rain."
+        for _, row in daily_df.head(5).iterrows()
     ])
-    return f"""Weather for {location['name']}, {location.get('country', '')}:
-- Condition: {weather_desc}
-- Temperature: {current['temperature_2m']:.1f}{unit_symbol}
-- Humidity: {current['relative_humidity_2m']}%
-- Wind: {current['wind_speed_10m']} {wind_unit}
-- Precipitation: {current['precipitation']:.1f} mm
-- AQI: {aqi} ({aqi_level})
-- Rain chance today: {daily_df.iloc[0]['precipitation_probability_max']}%
-4-Day Forecast:
-{forecast_lines}""".strip()
+
+    return (
+        f"Current weather in {location['name']}: {weather_desc} with a temperature of "
+        f"{current['temperature_2m']:.1f}{unit_symbol}. Humidity is {current['relative_humidity_2m']}% "
+        f"and wind speed is {current['wind_speed_10m']} {wind_unit}. "
+        f"Precipitation today is {current['precipitation']:.1f} mm. "
+        f"The air quality index is {aqi}, which is considered {aqi_level}. "
+        f"Rain probability today is {daily_df.iloc[0]['precipitation_probability_max']}%. "
+        f"Here is the forecast for the coming days: {forecast_text}"
+    )
 
 
 # ============================================================
-# ✅ AI FUNCTIONS — Google AI Cookbook Style
+# ✅ PROJECT 3 — AI Weather Summarizer (HuggingFace BART)
 # ============================================================
-
-def ai_generate(prompt: str) -> str:
-    """Basic text generation using Google AI Cookbook SDK."""
-    if not client:
-        return "⚠️ Please add your API key. Get it free at aistudio.google.com/app/apikey"
-    response = client.models.generate_content(
-        model=MODEL_ID,
-        contents=prompt
-    )
-    return response.text
-
-
-def ai_generate_with_search(prompt: str):
-    """
-    Google Search Grounding — Google AI Cookbook style.
-    Fetches live results from Google Search in real time.
-    """
-    if not client:
-        return "⚠️ Please add your API key. Get it free at aistudio.google.com/app/apikey", []
-
-    # ✅ Cookbook-style Search Grounding Tool
-    grounding_tool = types.Tool(
-        google_search=types.GoogleSearch()
-    )
-
-    response = client.models.generate_content(
-        model=MODEL_ID,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            tools=[grounding_tool]
-        )
-    )
-
-    # Extract grounding sources
-    sources = []
+def get_ai_summary(weather_text: str) -> str:
+    """Summarizes weather data using BART model — no API key needed."""
     try:
-        candidate = response.candidates[0]
-        if candidate.grounding_metadata and candidate.grounding_metadata.grounding_chunks:
-            for chunk in candidate.grounding_metadata.grounding_chunks:
-                if chunk.web:
-                    sources.append({
-                        "title": chunk.web.title or "Source",
-                        "url": chunk.web.uri or "#"
-                    })
-    except Exception:
-        pass
+        summarizer = load_summarizer()
+        # BART works best with 100-1000 words
+        result = summarizer(
+            weather_text,
+            max_length=80,
+            min_length=30,
+            do_sample=False
+        )
+        return result[0]["summary_text"]
+    except Exception as e:
+        return f"(Summary error: {e})"
 
-    return response.text, sources
+
+# ============================================================
+# ✅ PROJECT 3 — Weather Condition Classifier (Zero-Shot)
+# ============================================================
+def classify_weather_severity(weather_text: str) -> dict:
+    """Classifies weather severity using zero-shot classification."""
+    try:
+        classifier = load_classifier()
+        labels = ["safe and pleasant", "mild caution advised", "severe weather warning", "extreme danger"]
+        result = classifier(weather_text[:500], candidate_labels=labels)
+        return {
+            "label": result["labels"][0],
+            "score": result["scores"][0],
+            "all": list(zip(result["labels"], result["scores"]))
+        }
+    except Exception as e:
+        return {"label": "unknown", "score": 0, "all": []}
 
 
-def ai_chat(messages: list, system_prompt: str) -> str:
-    """Multi-turn chat using Google AI Cookbook SDK."""
-    if not client:
-        return "⚠️ Please add your API key. Get it free at aistudio.google.com/app/apikey"
+# ============================================================
+# ✅ PROJECT 15 — Weather Performance Analyzer
+# ============================================================
+def analyze_weather_patterns(daily_df, unit_symbol) -> dict:
+    """Analyzes 10-day weather patterns — no AI model needed, pure data analysis."""
+    temps_max = daily_df["temperature_2m_max"].tolist()
+    temps_min = daily_df["temperature_2m_min"].tolist()
+    rain_chances = daily_df["precipitation_probability_max"].tolist()
 
-    contents = [
-        types.Content(role="user", parts=[types.Part.from_text(text=system_prompt)]),
-        types.Content(role="model", parts=[types.Part.from_text(text="Understood! Ready to help with weather questions.")])
-    ]
-    for msg in messages:
-        role = "user" if msg["role"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+    avg_max = sum(temps_max) / len(temps_max)
+    avg_min = sum(temps_min) / len(temps_min)
+    avg_rain = sum(rain_chances) / len(rain_chances)
+    max_temp = max(temps_max)
+    min_temp = min(temps_min)
+    rainy_days = sum(1 for r in rain_chances if r > 50)
+    temp_swing = max_temp - min_temp
 
-    response = client.models.generate_content(model=MODEL_ID, contents=contents)
-    return response.text
+    insights = []
+
+    if avg_rain > 60:
+        insights.append("🌧️ High rainfall expected — carry an umbrella all week.")
+    elif avg_rain > 30:
+        insights.append("🌦️ Moderate rain chances — be prepared for occasional showers.")
+    else:
+        insights.append("☀️ Mostly dry week ahead — great for outdoor activities.")
+
+    if temp_swing > 10:
+        insights.append(f"🌡️ Large temperature swing of {temp_swing:.0f}{unit_symbol} — dress in layers.")
+    else:
+        insights.append(f"🌡️ Stable temperatures throughout the week.")
+
+    if max_temp > 35:
+        insights.append("🔥 Heatwave risk — stay hydrated and avoid midday sun.")
+    elif min_temp < 5:
+        insights.append("🥶 Cold snap expected — bundle up warmly.")
+
+    if rainy_days >= 7:
+        insights.append(f"☔ Rain expected on {rainy_days} out of 10 days.")
+    elif rainy_days == 0:
+        insights.append("🌈 Zero rain days forecast — perfect outdoor week!")
+
+    return {
+        "avg_max": avg_max,
+        "avg_min": avg_min,
+        "avg_rain": avg_rain,
+        "max_temp": max_temp,
+        "min_temp": min_temp,
+        "rainy_days": rainy_days,
+        "temp_swing": temp_swing,
+        "insights": insights
+    }
+
+
+# ============================================================
+# ✅ PROJECT 8 — Weather Flashcard Generator (Flan-T5)
+# ============================================================
+def generate_weather_tips(weather_text: str, city: str) -> list:
+    """Generates weather tips using Flan-T5 — no API key needed."""
+    try:
+        generator = load_text_generator()
+        questions = [
+            f"What clothing should someone wear in {city} based on this weather: {weather_text[:300]}?",
+            f"What outdoor activities are suitable for this weather in {city}: {weather_text[:300]}?",
+            f"What health precautions should be taken for this weather: {weather_text[:300]}?",
+        ]
+        tips = []
+        for q in questions:
+            result = generator(q, max_length=80)
+            tips.append(result[0]["generated_text"])
+        return tips
+    except Exception as e:
+        return [f"(Tip generation error: {e})"]
 
 
 # ============================================================
@@ -191,18 +248,20 @@ st.set_page_config(page_title="PyWeather AI", layout="wide", page_icon="🌤️"
 
 st.markdown("""
 <style>
-.chat-user {
-    background: #e3f2fd; border-radius: 12px 12px 2px 12px;
-    padding: 10px 14px; margin: 6px 0; text-align: right; font-size: 0.9em;
-}
-.chat-ai {
-    background: #e8f5e9; border-radius: 12px 12px 12px 2px;
-    padding: 10px 14px; margin: 6px 0; font-size: 0.9em;
-}
-.badge {
-    background: linear-gradient(135deg, #4285F4, #34A853);
+.badge-blue {
+    background: linear-gradient(135deg, #1a73e8, #0d47a1);
     color: white; padding: 3px 12px; border-radius: 12px;
     font-size: 0.75em; font-weight: 700;
+}
+.badge-green {
+    background: linear-gradient(135deg, #34A853, #1e7e34);
+    color: white; padding: 3px 12px; border-radius: 12px;
+    font-size: 0.75em; font-weight: 700;
+}
+.insight-box {
+    background: #1e1e2e; border-left: 4px solid #4285F4;
+    padding: 10px 16px; border-radius: 8px; margin: 6px 0;
+    font-size: 0.95em;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -212,35 +271,35 @@ st.markdown("""
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/1779/1779940.png", width=80)
     st.title("PyWeather AI")
-    st.caption("✅ Google AI Cookbook SDK")
+    st.success("✅ No API Key Needed!")
+    st.caption("Powered by HuggingFace local models")
 
-    # API Key status
-    if not client:
-        st.error("⚠️ API Key Missing!\n\nGet FREE key:\naistudio.google.com/app/apikey\n\nThen add to Codespace secrets as GEMINI_API_KEY")
-    else:
-        st.success("✅ API Key Connected")
+    st.markdown("""
+    **Intel Unnati Projects Used:**
+    - 📰 Project 3: News Summarizer
+    - 📊 Project 15: Performance Analyzer
+    - 📚 Project 8: Flashcard/Tips Generator
+    """)
 
     if "saved_cities" not in st.session_state:
         st.session_state.saved_cities = ["London", "New York", "Tokyo"]
 
     city = st.text_input("Enter City Name", "Ghaziabad")
 
-    def reset_ai_cache():
-        for key in ["ai_summary", "ai_recommendations", "ai_news", "ai_context"]:
+    def reset_cache():
+        for key in ["ai_summary", "ai_severity", "ai_tips", "ai_analysis"]:
             st.session_state[key] = None
-        st.session_state.ai_news_sources = []
-        st.session_state.chat_history = []
 
     if st.button("Search City", use_container_width=True):
         st.session_state.city = city
-        reset_ai_cache()
+        reset_cache()
 
     st.write("---")
     st.write("**Favorite Cities:**")
     for saved_city in st.session_state.saved_cities:
         if st.button(saved_city, use_container_width=True, key=saved_city):
             st.session_state.city = saved_city
-            reset_ai_cache()
+            reset_cache()
 
     if "city" not in st.session_state:
         st.session_state.city = "Ghaziabad"
@@ -250,46 +309,9 @@ with st.sidebar:
     selected_unit = unit_options[st.radio("Temperature Unit", unit_options.keys())]
     unit_symbol = "°C" if selected_unit == "metric" else "°F"
 
-    # Chat
-    st.write("---")
-    st.markdown("### 🤖 Ask AI")
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    for msg in st.session_state.chat_history[-6:]:
-        css = "chat-user" if msg["role"] == "user" else "chat-ai"
-        icon = "👤" if msg["role"] == "user" else "🤖"
-        st.markdown(f'<div class="{css}">{icon} {msg["content"]}</div>', unsafe_allow_html=True)
-
-    with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_input("Ask about the weather...", placeholder="Will it rain tomorrow?", label_visibility="collapsed")
-        send = st.form_submit_button("Send ➤", use_container_width=True)
-
-    if send and user_input:
-        if "weather_data" in st.session_state:
-            ctx = build_weather_context(
-                st.session_state.weather_data, st.session_state.air_data,
-                st.session_state.location, st.session_state.unit_symbol,
-                st.session_state.selected_unit
-            )
-            system = f"You are PyWeather AI for {st.session_state.city}. Answer weather questions in 2-4 sentences.\n\nWeather:\n{ctx}"
-            with st.spinner("Thinking..."):
-                try:
-                    reply = ai_chat(
-                        st.session_state.chat_history + [{"role": "user", "content": user_input}],
-                        system
-                    )
-                    st.session_state.chat_history.append({"role": "user", "content": user_input})
-                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Chat error: {e}")
-        else:
-            st.warning("Search for a city first!")
-
 
 # --- Main Content ---
-st.header(f"Weather in {st.session_state.city}")
+st.header(f"🌤️ Weather in {st.session_state.city}")
 
 if st.session_state.city:
     weather_data, air_data, location = get_weather_data(st.session_state.city, selected_unit)
@@ -315,29 +337,20 @@ else:
 
     current = weather_data["current"]
     daily_df, hourly_df = process_forecast_data(weather_data)
-    weather_context = build_weather_context(weather_data, air_data, location, unit_symbol, selected_unit)
+    weather_text = build_weather_text(weather_data, air_data, location, unit_symbol, selected_unit)
 
-    tab_today, tab_forecast, tab_rec, tab_news = st.tabs([
-        "☀️ Today", "📅 10-Day Forecast", "🤖 AI Recommendations", "🔍 Live Weather News"
+    tab_today, tab_forecast, tab_summary, tab_analysis, tab_tips = st.tabs([
+        "☀️ Today",
+        "📅 10-Day Forecast",
+        "📰 AI Summary (Project 3)",
+        "📊 Pattern Analysis (Project 15)",
+        "📚 Weather Tips (Project 8)"
     ])
 
     # --- Tab 1: Today ---
     with tab_today:
         st.subheader(f"Current Conditions — {location['name']}, {location.get('country_code', '')}")
-
-        if not st.session_state.get("ai_summary"):
-            with st.spinner("✨ Generating AI summary..."):
-                try:
-                    st.session_state.ai_summary = ai_generate(
-                        f"Write a friendly 2-3 sentence weather summary for {st.session_state.city}. "
-                        f"Be conversational, paint a picture.\n\nData:\n{weather_context}"
-                    )
-                except Exception as e:
-                    st.session_state.ai_summary = f"(Error: {e})"
-
-        st.info(f"🤖 **AI Summary:** {st.session_state.ai_summary}")
         st.write("---")
-
         col1, col2 = st.columns([1, 2])
         with col1:
             st.markdown(f"<h1 style='font-size:5em;margin:0'>{current['temperature_2m']:.0f}{unit_symbol}</h1>", unsafe_allow_html=True)
@@ -352,7 +365,6 @@ else:
             aqi_level, aqi_color = get_aqi_level(aqi)
             st.markdown(f"Air Quality (AQI): <span style='color:{aqi_color};font-weight:bold'>{aqi_level} ({aqi})</span>", unsafe_allow_html=True)
             st.caption("0–50 Good · 51–100 Moderate · 101–150 Unhealthy (SG) · 151+ Unhealthy")
-
         st.write("---")
         cols = st.columns(3)
         cols[0].metric("Humidity", f"{current['relative_humidity_2m']}%")
@@ -374,139 +386,141 @@ else:
         fig = px.line(hourly_df, y=plot_choice, title=f"{plot_choice} Trend")
         st.plotly_chart(fig, use_container_width=True)
 
-    # --- Tab 3: AI Recommendations ---
-    with tab_rec:
-        st.header("🤖 AI Recommendations")
-        st.caption("Powered by Google AI Cookbook — client.models.generate_content()")
+    # --- Tab 3: AI Summary (Project 3) ---
+    with tab_summary:
+        st.header("📰 AI Weather Summarizer")
+        st.markdown('<span class="badge-blue">📰 Intel Unnati Project 3 — News Summarizer</span>', unsafe_allow_html=True)
+        st.caption("Uses HuggingFace `facebook/bart-large-cnn` locally — NO API KEY required.")
 
-        if st.button("🔄 Regenerate"):
-            st.session_state.ai_recommendations = None
+        with st.expander("📄 Raw Weather Text (Input to AI)"):
+            st.write(weather_text)
 
-        if not st.session_state.get("ai_recommendations"):
-            with st.spinner("Generating recommendations..."):
-                try:
-                    st.session_state.ai_recommendations = ai_generate(
-                        f"""For {st.session_state.city} weather, provide:
-**👗 What to Wear** — 2-3 sentences of clothing advice.
-**🏃 Activity Suggestions** — 2-3 activity ideas for this weather.
-**🏥 Health & Safety** — 1-2 sentences, mention AQI if relevant.
-Weather Data:\n{weather_context}"""
-                    )
-                except Exception as e:
-                    st.session_state.ai_recommendations = f"(Error: {e})"
+        if st.button("🔄 Regenerate Summary"):
+            st.session_state.ai_summary = None
+            st.session_state.ai_severity = None
 
-        st.markdown(st.session_state.get("ai_recommendations", ""))
+        # BART Summary
+        st.subheader("🤖 AI-Generated Summary")
+        if not st.session_state.get("ai_summary"):
+            with st.spinner("🧠 BART model summarizing weather data..."):
+                st.session_state.ai_summary = get_ai_summary(weather_text)
 
-        st.write("---")
-        st.subheader("⚡ Quick Questions")
-        quick_qs = ["Should I carry an umbrella?", "Good weather for a run?", "Safe air quality for kids?"]
-        q_cols = st.columns(3)
-        for i, q in enumerate(quick_qs):
-            if q_cols[i].button(q, use_container_width=True):
-                with st.spinner("Asking AI..."):
-                    try:
-                        ans = ai_generate(f"Weather:\n{weather_context}\n\nQuestion: {q}\nAnswer in 2-3 sentences.")
-                        st.info(f"**{q}**\n\n{ans}")
-                    except Exception as e:
-                        st.error(str(e))
-
-    # --- Tab 4: Live Weather News ---
-    with tab_news:
-        st.header("🔍 Live Weather News")
-        st.markdown('<span class="badge">🌐 Google Search Grounding — Google AI Cookbook</span>', unsafe_allow_html=True)
-        st.caption("Uses `types.Tool(google_search=types.GoogleSearch())` to fetch live results from Google.")
-
-        with st.expander("📖 Cookbook Code Used"):
-            st.code("""from google import genai
-from google.genai import types
-
-client = genai.Client(api_key="YOUR_KEY")  # aistudio.google.com/app/apikey
-
-# Google Search Grounding Tool
-grounding_tool = types.Tool(
-    google_search=types.GoogleSearch()
-)
-
-response = client.models.generate_content(
-    model="gemini-2.0-flash",
-    contents="Latest weather alerts for Delhi?",
-    config=types.GenerateContentConfig(
-        tools=[grounding_tool]
-    )
-)
-
-print(response.text)
-
-# Access live sources:
-for chunk in response.candidates[0].grounding_metadata.grounding_chunks:
-    print(chunk.web.title, chunk.web.uri)
-""", language="python")
-
-        if st.button("🔄 Refresh Live News"):
-            st.session_state.ai_news = None
-            st.session_state.ai_news_sources = []
-            st.session_state.ai_context = None
-
-        # Live alerts
-        st.subheader(f"⚠️ Live Alerts & News — {st.session_state.city}")
-        if not st.session_state.get("ai_news"):
-            with st.spinner("🌐 Searching Google for live weather news..."):
-                try:
-                    news, sources = ai_generate_with_search(
-                        f"What are the latest weather alerts, warnings, and news for {st.session_state.city} right now? "
-                        f"List 3-5 key bullet points. Be factual and current."
-                    )
-                    st.session_state.ai_news = news
-                    st.session_state.ai_news_sources = sources
-                except Exception as e:
-                    st.session_state.ai_news = f"(Search error: {e})"
-                    st.session_state.ai_news_sources = []
-
-        st.markdown(st.session_state.get("ai_news", ""))
-
-        if st.session_state.get("ai_news_sources"):
-            st.write("---")
-            st.caption("**Live Sources from Google Search:**")
-            for src in st.session_state.ai_news_sources[:5]:
-                st.markdown(f"🔗 [{src['title']}]({src['url']})")
+        st.info(f"📋 **Summary:** {st.session_state.ai_summary}")
 
         st.write("---")
 
-        # Seasonal context
-        st.subheader("🌍 Seasonal Weather Context")
-        if not st.session_state.get("ai_context"):
-            with st.spinner("🌐 Fetching context from Google..."):
-                try:
-                    ctx_text, _ = ai_generate_with_search(
-                        f"Is the current weather in {st.session_state.city} unusual for this time of year? "
-                        f"What seasonal patterns are expected? Answer in 3-4 sentences."
-                    )
-                    st.session_state.ai_context = ctx_text
-                except Exception as e:
-                    st.session_state.ai_context = f"(Error: {e})"
+        # Zero-Shot Classification
+        st.subheader("🚦 Weather Severity Classification")
+        st.caption("Zero-shot classification using `facebook/bart-large-mnli`")
 
-        st.info(st.session_state.get("ai_context", ""))
+        if not st.session_state.get("ai_severity"):
+            with st.spinner("🧠 Classifying weather severity..."):
+                st.session_state.ai_severity = classify_weather_severity(weather_text)
 
-        st.write("---")
+        severity = st.session_state.ai_severity
+        label = severity.get("label", "unknown")
+        score = severity.get("score", 0)
 
-        # Custom live search
-        st.subheader("🔎 Custom Live Search")
-        with st.form("search_form", clear_on_submit=True):
-            query = st.text_input(
-                "Search...",
-                placeholder=f"Is there a heatwave in {st.session_state.city}?",
-                label_visibility="collapsed"
+        color_map = {
+            "safe and pleasant": "🟢",
+            "mild caution advised": "🟡",
+            "severe weather warning": "🟠",
+            "extreme danger": "🔴"
+        }
+        emoji = color_map.get(label, "⚪")
+        st.markdown(f"### {emoji} **{label.title()}** ({score*100:.1f}% confidence)")
+
+        # Show all scores as a bar chart
+        if severity.get("all"):
+            labels_list = [x[0] for x in severity["all"]]
+            scores_list = [x[1] * 100 for x in severity["all"]]
+            fig = px.bar(
+                x=scores_list, y=labels_list,
+                orientation="h",
+                title="Severity Classification Confidence",
+                labels={"x": "Confidence (%)", "y": "Category"},
+                color=scores_list,
+                color_continuous_scale="RdYlGn_r"
             )
-            search_btn = st.form_submit_button("🔍 Search Google")
+            fig.update_layout(showlegend=False, coloraxis_showscale=False)
+            st.plotly_chart(fig, use_container_width=True)
 
-        if search_btn and query:
-            with st.spinner("🌐 Searching Google in real time..."):
-                try:
-                    result, sources = ai_generate_with_search(query)
-                    st.success(result)
-                    if sources:
-                        st.caption("**Sources:**")
-                        for src in sources[:4]:
-                            st.markdown(f"🔗 [{src['title']}]({src['url']})")
-                except Exception as e:
-                    st.error(f"Search error: {e}")
+    # --- Tab 4: Pattern Analysis (Project 15) ---
+    with tab_analysis:
+        st.header("📊 Weather Pattern Analyzer")
+        st.markdown('<span class="badge-green">📊 Intel Unnati Project 15 — Performance Analyzer</span>', unsafe_allow_html=True)
+        st.caption("Analyzes 10-day weather patterns and generates insights — NO API KEY required.")
+
+        if not st.session_state.get("ai_analysis"):
+            st.session_state.ai_analysis = analyze_weather_patterns(daily_df, unit_symbol)
+
+        analysis = st.session_state.ai_analysis
+
+        # Metrics row
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Avg High", f"{analysis['avg_max']:.1f}{unit_symbol}")
+        col2.metric("Avg Low", f"{analysis['avg_min']:.1f}{unit_symbol}")
+        col3.metric("Rainy Days", f"{analysis['rainy_days']} / 10")
+        col4.metric("Temp Swing", f"{analysis['temp_swing']:.1f}{unit_symbol}")
+
+        st.write("---")
+
+        # AI Insights
+        st.subheader("🔍 AI-Generated Insights")
+        for insight in analysis["insights"]:
+            st.markdown(f'<div class="insight-box">{insight}</div>', unsafe_allow_html=True)
+
+        st.write("---")
+
+        # Temperature trend chart
+        st.subheader("📈 10-Day Temperature Range")
+        temp_fig = px.area(
+            daily_df,
+            x="day",
+            y=["temperature_2m_max", "temperature_2m_min"],
+            title="Max & Min Temperature Forecast",
+            labels={"value": f"Temperature ({unit_symbol})", "day": "Day", "variable": ""},
+            color_discrete_map={
+                "temperature_2m_max": "#FF6B6B",
+                "temperature_2m_min": "#4ECDC4"
+            }
+        )
+        st.plotly_chart(temp_fig, use_container_width=True)
+
+        # Rain probability chart
+        st.subheader("🌧️ Rain Probability Trend")
+        rain_fig = px.bar(
+            daily_df,
+            x="day",
+            y="precipitation_probability_max",
+            title="Daily Rain Probability (%)",
+            color="precipitation_probability_max",
+            color_continuous_scale="Blues",
+            labels={"precipitation_probability_max": "Rain Chance (%)", "day": "Day"}
+        )
+        rain_fig.update_layout(coloraxis_showscale=False)
+        st.plotly_chart(rain_fig, use_container_width=True)
+
+    # --- Tab 5: Weather Tips (Project 8) ---
+    with tab_tips:
+        st.header("📚 AI Weather Tips Generator")
+        st.markdown('<span class="badge-blue">📚 Intel Unnati Project 8 — Flashcard Generator</span>', unsafe_allow_html=True)
+        st.caption("Uses HuggingFace `google/flan-t5-base` locally — NO API KEY required.")
+
+        if st.button("🔄 Generate New Tips"):
+            st.session_state.ai_tips = None
+
+        if not st.session_state.get("ai_tips"):
+            with st.spinner("🧠 Flan-T5 generating weather tips..."):
+                st.session_state.ai_tips = generate_weather_tips(weather_text, st.session_state.city)
+
+        tips = st.session_state.ai_tips
+        tip_titles = ["👗 What to Wear", "🏃 Activity Suggestions", "🏥 Health & Safety"]
+        tip_colors = ["#e3f2fd", "#e8f5e9", "#fff3e0"]
+
+        for i, (title, tip) in enumerate(zip(tip_titles, tips)):
+            st.markdown(f"""
+            <div style='background:{tip_colors[i]};padding:16px;border-radius:10px;margin:10px 0;color:#000'>
+                <strong>{title}</strong><br>{tip}
+            </div>
+            """, unsafe_allow_html=True)
