@@ -9,9 +9,9 @@ from google import genai
 from google.genai import types
 
 # 👇 PASTE YOUR API KEY HERE (get it free from aistudio.google.com/app/apikey)
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", AIzaSyB0eyztEnRbdZw_AG30_1AQhiqU1ErZkho)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyB0eyztEnRbdZw_AG30_1AQhiqU1ErZkho")
 
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY != AIzaSyB0eyztEnRbdZw_AG30_1AQhiqU1ErZkho else None
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY != "AIzaSyB0eyztEnRbdZw_AG30_1AQhiqU1ErZkho" else None
 MODEL_ID = "gemini-2.0-flash"
 
 # --- Weather API (Free, no key needed) ---
