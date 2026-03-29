@@ -15,113 +15,186 @@ st.set_page_config(page_title="PyWeather AI", layout="wide", page_icon="🌤️"
 # ============================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-/* Main metric cards */
+/* === CARDS === */
 .metric-card {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 20px 24px;
+    background: linear-gradient(145deg, #1c1c3a, #16213e);
+    border: 1px solid rgba(116,185,255,0.1);
+    border-radius: 18px;
+    padding: 22px 26px;
     margin: 8px 0;
+    transition: border-color 0.2s;
 }
+.metric-card:hover { border-color: rgba(116,185,255,0.25); }
 
-/* Temperature display */
+/* === TEMPERATURE === */
 .temp-display {
-    font-size: 5.5em;
-    font-weight: 700;
-    background: linear-gradient(135deg, #74b9ff, #0984e3);
+    font-size: 6em;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a8d8ff, #0984e3);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     line-height: 1;
     margin: 0;
+    letter-spacing: -3px;
 }
 
-/* Section headers */
+/* === SECTION HEADERS === */
 .section-header {
-    font-size: 1.1em;
-    font-weight: 600;
-    color: #74b9ff;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(116,185,255,0.2);
-}
-
-/* Info pills */
-.pill {
-    display: inline-block;
-    padding: 4px 14px;
-    border-radius: 20px;
-    font-size: 0.8em;
-    font-weight: 600;
-    margin: 3px;
-}
-.pill-blue { background: rgba(116,185,255,0.15); color: #74b9ff; border: 1px solid rgba(116,185,255,0.3); }
-.pill-green { background: rgba(85,239,196,0.15); color: #55efc4; border: 1px solid rgba(85,239,196,0.3); }
-.pill-orange { background: rgba(253,203,110,0.15); color: #fdcb6e; border: 1px solid rgba(253,203,110,0.3); }
-.pill-red { background: rgba(255,118,117,0.15); color: #ff7675; border: 1px solid rgba(255,118,117,0.3); }
-
-/* AI Summary box */
-.ai-box {
-    background: linear-gradient(135deg, rgba(116,185,255,0.08), rgba(9,132,227,0.05));
-    border: 1px solid rgba(116,185,255,0.25);
-    border-radius: 14px;
-    padding: 18px 22px;
-    margin: 12px 0;
-    position: relative;
-}
-.ai-label {
-    font-size: 0.7em;
+    font-size: 0.72em;
     font-weight: 700;
     color: #74b9ff;
     text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 8px;
+    letter-spacing: 2.5px;
+    margin: 20px 0 14px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(116,185,255,0.15);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Insight cards */
-.insight-card {
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
+/* === AI BOX === */
+.ai-box {
+    background: linear-gradient(135deg, rgba(116,185,255,0.06), rgba(9,132,227,0.03));
+    border: 1px solid rgba(116,185,255,0.2);
     border-left: 3px solid #74b9ff;
-    border-radius: 0 10px 10px 0;
-    padding: 12px 18px;
-    margin: 8px 0;
-    font-size: 0.95em;
-    color: #dfe6e9;
-}
-
-/* Tip cards */
-.tip-card {
     border-radius: 14px;
     padding: 20px 24px;
-    margin: 10px 0;
-    color: #2d3436;
+    margin: 14px 0;
 }
-.tip-wear { background: linear-gradient(135deg, #e8f4fd, #d6eaf8); border-left: 4px solid #2980b9; }
-.tip-activity { background: linear-gradient(135deg, #e9f7ef, #d5f5e3); border-left: 4px solid #27ae60; }
-.tip-health { background: linear-gradient(135deg, #fef9e7, #fdebd0); border-left: 4px solid #f39c12; }
+.ai-label {
+    font-size: 0.68em;
+    font-weight: 800;
+    color: #74b9ff;
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
 
-/* Severity bar */
-.severity-safe { color: #00b894; font-weight: 700; font-size: 1.3em; }
-.severity-mild { color: #fdcb6e; font-weight: 700; font-size: 1.3em; }
-.severity-severe { color: #e17055; font-weight: 700; font-size: 1.3em; }
-.severity-extreme { color: #d63031; font-weight: 700; font-size: 1.3em; }
+/* === INSIGHT CARDS === */
+.insight-card {
+    background: rgba(116,185,255,0.04);
+    border: 1px solid rgba(116,185,255,0.1);
+    border-left: 3px solid #74b9ff;
+    border-radius: 0 12px 12px 0;
+    padding: 14px 20px;
+    margin: 8px 0;
+    font-size: 0.92em;
+    color: #dfe6e9;
+    line-height: 1.6;
+}
 
-/* Sidebar styling */
+/* === TIP CARDS === */
+.tip-wear {
+    background: linear-gradient(135deg, rgba(41,128,185,0.12), rgba(41,128,185,0.05));
+    border: 1px solid rgba(41,128,185,0.25);
+    border-radius: 16px; padding: 22px 26px; margin: 12px 0;
+}
+.tip-activity {
+    background: linear-gradient(135deg, rgba(39,174,96,0.12), rgba(39,174,96,0.05));
+    border: 1px solid rgba(39,174,96,0.25);
+    border-radius: 16px; padding: 22px 26px; margin: 12px 0;
+}
+.tip-health {
+    background: linear-gradient(135deg, rgba(243,156,18,0.12), rgba(243,156,18,0.05));
+    border: 1px solid rgba(243,156,18,0.25);
+    border-radius: 16px; padding: 22px 26px; margin: 12px 0;
+}
+.tip-title {
+    font-size: 0.8em;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 0 0 10px 0;
+}
+.tip-body { color: #dfe6e9; line-height: 1.7; font-size: 0.95em; margin: 0; }
+
+/* === GLANCE CARDS === */
+.glance-card {
+    background: linear-gradient(145deg, #1c1c3a, #16213e);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 18px 14px;
+    text-align: center;
+    margin: 6px 0;
+}
+
+/* === FORECAST ROW === */
+.forecast-row {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 14px 22px;
+    margin: 5px 0;
+    transition: background 0.2s;
+}
+.forecast-row:hover { background: rgba(116,185,255,0.05); }
+
+/* === SEVERITY CARD === */
+.severity-card {
+    border-radius: 16px;
+    padding: 22px 26px;
+    margin: 14px 0;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+/* === BUTTONS === */
+.stButton > button {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    font-size: 0.85em !important;
+    padding: 8px 20px !important;
+    transition: all 0.2s !important;
+}
+.stButton > button:hover { transform: translateY(-1px); }
+
+/* === SIDEBAR === */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
-    border-right: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, #0b0f1a 0%, #111827 100%);
+    border-right: 1px solid rgba(255,255,255,0.05);
+}
+section[data-testid="stSidebar"] .stButton > button {
+    background: rgba(116,185,255,0.07) !important;
+    border: 1px solid rgba(116,185,255,0.15) !important;
+    color: #b2bec3 !important;
+    width: 100%;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(116,185,255,0.15) !important;
+    color: #fff !important;
 }
 
-/* Hide streamlit branding */
+/* === TABS === */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 12px;
+    padding: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 10px !important;
+    padding: 8px 18px !important;
+    font-weight: 500 !important;
+    font-size: 0.88em !important;
+}
+.stTabs [aria-selected="true"] {
+    background: rgba(116,185,255,0.15) !important;
+    color: #74b9ff !important;
+}
+
+/* === MISC === */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
+.block-container { padding-top: 1.5rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -417,10 +490,13 @@ def generate_smart_tips(weather_data, air_data, unit_symbol, selected_unit):
 # ============================================================
 with st.sidebar:
     st.markdown("""
-    <div style='text-align:center; padding: 10px 0 5px 0;'>
-        <img src='https://cdn-icons-png.flaticon.com/512/1779/1779940.png' width='70'>
-        <h2 style='margin:8px 0 2px 0; color:#74b9ff; font-size:1.4em;'>PyWeather AI</h2>
-        <p style='color:#636e72; font-size:0.8em; margin:0;'>Intelligent Weather Assistant</p>
+    <div style='text-align:center; padding: 16px 0 10px 0;'>
+        <div style='font-size:3em; margin-bottom:6px;'>🌤️</div>
+        <h2 style='margin:0 0 4px 0; color:#fff; font-size:1.3em; font-weight:800; letter-spacing:-0.5px;'>PyWeather AI</h2>
+        <p style='color:#636e72; font-size:0.75em; margin:0; letter-spacing:1px; text-transform:uppercase;'>Intelligent Weather Assistant</p>
+    </div>
+    <div style='background:rgba(39,174,96,0.1); border:1px solid rgba(39,174,96,0.25); border-radius:10px; padding:8px 14px; margin:10px 0; text-align:center;'>
+        <p style='color:#55efc4; font-size:0.75em; font-weight:700; margin:0;'>✅ No API Key Required</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -457,10 +533,11 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("""
-    <div style='color:#636e72; font-size:0.75em; text-align:center; padding:8px 0;'>
-        🤖 Powered by HuggingFace<br>
-        🌐 Weather by Open-Meteo<br>
-        ✅ No API Key Required
+    <div style='border-top:1px solid rgba(255,255,255,0.05); padding-top:14px; margin-top:4px;'>
+        <p style='color:#4a5568; font-size:0.72em; text-align:center; line-height:2; margin:0;'>
+            🤖 HuggingFace Models &nbsp;·&nbsp; 🌐 Open-Meteo API<br>
+            <span style='color:#2d3748;'>Built for Intel Unnati Generative AI</span>
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -468,7 +545,13 @@ with st.sidebar:
 # ============================================================
 # FETCH WEATHER
 # ============================================================
-st.markdown(f"<h1 style='margin-bottom:4px;'>🌤️ {st.session_state.city}</h1>", unsafe_allow_html=True)
+st.markdown(f"""
+<div style='margin-bottom:16px;'>
+    <h1 style='margin:0; font-size:2.4em; font-weight:800; letter-spacing:-1px;'>
+        🌤️ {st.session_state.city}
+    </h1>
+</div>
+""", unsafe_allow_html=True)
 
 if st.session_state.city:
     weather_data, air_data, location = get_weather_data(st.session_state.city, selected_unit)
@@ -664,6 +747,7 @@ else:
         if st.button("🔄 Refresh Summary", key="refresh_summary"):
             st.session_state.ai_summary = None
             st.session_state.ai_severity = None
+            st.rerun()
 
         # Smart Summary (rule-based, always works)
         if not st.session_state.get("ai_summary"):
@@ -705,13 +789,12 @@ else:
         }.get(label, "🔍")
 
         st.markdown(f"""
-        <div class='metric-card'>
-            <div style='display:flex; align-items:center; gap:16px;'>
-                <p style='font-size:2.5em; margin:0;'>{sev_emoji}</p>
-                <div>
-                    <p style='font-size:1.3em; font-weight:700; color:{sev_color}; margin:0;'>{label.title()}</p>
-                    <p style='color:#636e72; margin:0; font-size:0.85em;'>Confidence: {score*100:.1f}%</p>
-                </div>
+        <div class='severity-card' style='background: linear-gradient(135deg, {sev_color}15, {sev_color}05); border: 1px solid {sev_color}40;'>
+            <p style='font-size:3em; margin:0;'>{sev_emoji}</p>
+            <div>
+                <p style='font-size:0.7em; font-weight:800; color:{sev_color}; text-transform:uppercase; letter-spacing:2px; margin:0 0 4px 0;'>Severity Level</p>
+                <p style='font-size:1.5em; font-weight:700; color:{sev_color}; margin:0;'>{label.title()}</p>
+                <p style='color:#636e72; margin:4px 0 0 0; font-size:0.82em;'>Model confidence: {score*100:.1f}%</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -836,6 +919,7 @@ else:
 
         if st.button("🔄 Refresh Tips", key="refresh_tips"):
             st.session_state.ai_tips = None
+            st.rerun()
 
         if not st.session_state.get("ai_tips"):
             with st.spinner("Generating personalized tips..."):
@@ -847,16 +931,16 @@ else:
         wear, activity, health = st.session_state.ai_tips
 
         tips = [
-            ("👗", "What to Wear", wear, "tip-wear", "#2980b9"),
-            ("🏃", "Activity Suggestions", activity, "tip-activity", "#27ae60"),
-            ("🏥", "Health & Safety", health, "tip-health", "#f39c12"),
+            ("👗", "What to Wear", wear, "tip-wear", "#74b9ff"),
+            ("🏃", "Activity Suggestions", activity, "tip-activity", "#55efc4"),
+            ("🏥", "Health & Safety", health, "tip-health", "#fdcb6e"),
         ]
 
-        for em, title, content, css_class, color in tips:
+        for em, title, tip_content, css_class, color in tips:
             st.markdown(f"""
-            <div class='tip-card {css_class}'>
-                <p style='font-size:1em; font-weight:700; color:{color}; margin:0 0 8px 0;'>{em} {title}</p>
-                <p style='margin:0; line-height:1.6; font-size:0.95em;'>{content}</p>
+            <div class='{css_class}'>
+                <p class='tip-title' style='color:{color};'>{em} &nbsp;{title}</p>
+                <p class='tip-body'>{tip_content}</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -872,8 +956,8 @@ else:
         for col, (label, val) in zip(glance_cols, [("☂️ Umbrella?", umbrella), ("🌳 Outdoor?", outdoor), ("😷 Mask?", mask)]):
             with col:
                 st.markdown(f"""
-                <div class='metric-card' style='text-align:center;'>
-                    <p style='color:#636e72; font-size:0.85em; margin:0;'>{label}</p>
-                    <p style='font-size:1.1em; font-weight:600; margin:6px 0 0 0;'>{val}</p>
+                <div class='glance-card'>
+                    <p style='color:#636e72; font-size:0.75em; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; margin:0 0 8px 0;'>{label}</p>
+                    <p style='font-size:1.05em; font-weight:700; margin:0; color:#dfe6e9;'>{val}</p>
                 </div>
                 """, unsafe_allow_html=True)
