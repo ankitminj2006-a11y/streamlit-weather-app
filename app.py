@@ -152,10 +152,13 @@ WMO_CODES = {
     95:("Thunderstorm","⛈️"), 96:("Thunderstorm+Hail","⛈️"), 99:("Severe Storm","⛈️"),
 }
 
+# FIX: Removed showlegend=False from CHART_BASE to avoid conflicts with
+# px.bar/px.line charts that use color grouping (which adds legend traces).
+# showlegend is now passed explicitly on each chart where needed.
 CHART_BASE = dict(
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     font=dict(color="#b2bec3", family="Inter"),
-    margin=dict(l=0, r=0, t=20, b=0), showlegend=False
+    margin=dict(l=0, r=0, t=20, b=0)
 )
 
 
@@ -643,7 +646,8 @@ else:
         hr    = hourly_df.reset_index()
         fig_h = px.area(hr, x="Timestamp", y=plot_choice, color_discrete_sequence=[cmap[plot_choice]])
         fig_h.update_traces(opacity=0.78, line=dict(width=2))
-        fig_h.update_layout(**CHART_BASE, height=300,
+        # FIX: showlegend=False passed explicitly instead of via CHART_BASE
+        fig_h.update_layout(**CHART_BASE, height=300, showlegend=False,
                             xaxis=dict(showgrid=False, color="#636e72", title=""),
                             yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)",
                                        color="#636e72", title=plot_choice))
@@ -726,7 +730,8 @@ else:
                            color_discrete_map=dict(zip(sdf["Category"], sdf["Color"])),
                            text=sdf["Confidence"].apply(lambda v: f"{v}%"))
             fig_s.update_traces(textposition="outside", marker_line_width=0)
-            fig_s.update_layout(**CHART_BASE, height=190,
+            # FIX: showlegend=False passed explicitly instead of via CHART_BASE
+            fig_s.update_layout(**CHART_BASE, height=190, showlegend=False,
                                 xaxis=dict(showgrid=False, visible=False, title=""),
                                 yaxis=dict(showgrid=False, color="#b2bec3", title=""),
                                 margin=dict(l=0, r=70, t=10, b=0))
@@ -779,7 +784,8 @@ else:
                                                    "Rainy":"#0984e3","Stormy":"#d63031","Foggy":"#b2bec3"},
                                text=pdf["Probability"].apply(lambda v: f"{v}%"))
                 fig_p.update_traces(textposition="outside", marker_line_width=0)
-                fig_p.update_layout(**CHART_BASE, height=230,
+                # FIX: showlegend=False passed explicitly instead of via CHART_BASE
+                fig_p.update_layout(**CHART_BASE, height=230, showlegend=False,
                                     xaxis=dict(showgrid=False, visible=False, title=""),
                                     yaxis=dict(showgrid=False, color="#b2bec3", title=""),
                                     margin=dict(l=0, r=70, t=10, b=0))
@@ -825,7 +831,9 @@ else:
                                 color="Importance", color_continuous_scale="Blues",
                                 text=fi_df["Importance"].apply(lambda v: f"{v:.1f}%"))
                 fig_fi.update_traces(textposition="outside", marker_line_width=0)
-                fig_fi.update_layout(**CHART_BASE, height=280, coloraxis_showscale=False,
+                # FIX: showlegend=False passed explicitly instead of via CHART_BASE
+                fig_fi.update_layout(**CHART_BASE, height=280, showlegend=False,
+                                     coloraxis_showscale=False,
                                      xaxis=dict(showgrid=False, visible=False, title=""),
                                      yaxis=dict(showgrid=False, color="#b2bec3", title=""),
                                      margin=dict(l=0, r=80, t=10, b=0))
@@ -891,6 +899,7 @@ else:
             fig_t = px.line(tdf, x="Day", y="Temperature", color="Type",
                             color_discrete_map={"High":"#ff7675","Low":"#74b9ff"}, markers=True)
             fig_t.update_traces(line=dict(width=2.5))
+            # showlegend=True intentional here — legend labels High/Low are useful
             fig_t.update_layout(**CHART_BASE, height=280, showlegend=True,
                                 xaxis=dict(showgrid=False, color="#636e72", title="",
                                            tickangle=-30, tickfont=dict(size=10)),
@@ -910,6 +919,7 @@ else:
                            color_discrete_map={"Low (<40%)":"#74b9ff","Moderate (40–70%)":"#0984e3","High (>70%)":"#d63031"},
                            text=rdf["precipitation_probability_max"].apply(lambda r: f"{int(r)}%"))
             fig_r.update_traces(textposition="outside", marker_line_width=0)
+            # showlegend=True intentional here — legend labels are useful
             fig_r.update_layout(**CHART_BASE, height=280, showlegend=True,
                                 xaxis=dict(showgrid=False, color="#636e72", title="",
                                            tickangle=-30, tickfont=dict(size=10)),
